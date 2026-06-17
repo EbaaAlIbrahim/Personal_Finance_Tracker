@@ -26,6 +26,8 @@ app = FastAPI(title="Finance Tracker Architecture Test")
 origins = [
     "http://localhost:5173",    # Vite's standard local hosting port address
     "http://127.0.0.1:5173",
+    "http://localhost:3000",
+    "https://personal-finance-tracker-ui-kohl.vercel.app",
 ]
 
 # 3. Bind the middleware interceptor to your app engine instance
