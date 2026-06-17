@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // 1. Instantiate a unified global API instance targeting our FastAPI backend
 const api = axios.create({
-  baseURL: 'http://localhost:8000/api',
+  baseURL: 'https://personal-finance-tracker-beryl-iota.vercel.app',
   headers: {
     'Content-Type': 'application/json',
   },
