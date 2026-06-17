@@ -49,4 +49,11 @@ class Transaction(Base):
     authorized_date = Column(Date, nullable=True)
     pending = Column(Boolean, default=False)
 
+    terminal_id = Column(String(100), nullable=True, index=True)
+    device_fingerprint = Column(String(255), nullable=True, index=True)
+    cardholder_ip = Column(String(45), nullable=True) # Supports IPv4/IPv6
+    latitude = Column(Numeric(9, 6), nullable=True)
+    longitude = Column(Numeric(9, 6), nullable=True)
+    iso_processing_code = Column(String(6), nullable=True)
+
     user = relationship("User")
