@@ -6,6 +6,7 @@ import {
   Landmark, AlertTriangle, Mail, Lock, Shield, ArrowRight, UserPlus, LogIn as LogInIcon 
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
+import { usePlaidLink } from 'react-plaid-link';
 import { authAPI, transactionAPI } from './api';
 import './App.css';
 
@@ -24,6 +25,10 @@ export default function App() {
   const [summary, setSummary] = useState({ total_spend_volume: 0, transaction_count: 0 });
   const [profile, setProfile] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Plaid Integration Token Management States
+  const [linkToken, setLinkToken] = useState(null);
+  const [isLinkingBank, setIsLinkingBank] = useState(false);
 
   const [hasCustomCard, setHasCustomCard] = useState(false);
   const [customCardBrand, setCustomCardBrand] = useState('Visa Platinum');
@@ -68,6 +73,47 @@ export default function App() {
       setIsLoading(false);
     }
   }, [isAuthenticated]);
+
+    // Plaid Link initialization handler
+  const triggerPlaidSetup = async () => {
+    try {
+      setIsLinkingBank(true);
+      const response = await bankAPI.createLinkToken();
+      // Handle response directly based on your FastAPI structure
+      const fetchedToken = response.data.link_token;
+      setLinkToken(fetchedToken);
+    } catch (err) {
+      console.error("Failed to fetch secure bank handshake initialization token:", err);
+      setIsLinkingBank(false);
+    }
+  };
+
+  // Instantiating the Plaid React Client SDK configuration hook
+  const { open, ready } = usePlaidLink({
+    token: linkToken,
+    onSuccess: async (public_token, metadata) => {
+      try {
+        await bankAPI.exchangePublicToken(public_token);
+        setLinkToken(null);
+        setIsLinkingBank(false);
+        await fetchFinancialTelemetry(); // Instantly pull live asset balance states
+      } catch (err) {
+        console.error("Token handshake exchange protocol failure:", err);
+        setIsLinkingBank(false);
+      }
+    },
+    onExit: (err, metadata) => {
+      setLinkToken(null);
+      setIsLinkingBank(false);
+    }
+  });
+
+  // Safe engine watch rule to open overlay whenever a token drops from your server
+  useEffect(() => {
+    if (linkToken && ready) {
+      open();
+    }
+  }, [linkToken, ready]);
 
   const handleAuthSubmit = async (e) => {
     e.preventDefault();

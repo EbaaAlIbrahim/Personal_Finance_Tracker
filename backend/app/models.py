@@ -57,3 +57,9 @@ class Transaction(Base):
     iso_processing_code = Column(String(6), nullable=True)
 
     user = relationship("User")
+class Budget(Base):
+    __tablename__ = "budgets"
+    budget_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False)
+    category = Column(String(100), nullable=False) # e.g. "Food", "Global"
+    limit_amount = Column(Numeric(12, 2), nullable=False)

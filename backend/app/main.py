@@ -9,7 +9,8 @@ from app.dependencies import get_current_user
 import app.models as models
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-
+from app.fraud_detector import evaluate_swipe_risk
+from sqlalchemy import func
 from app.plaid_client import plaid_client, IS_MOCK_MODE
 from plaid.model.link_token_create_request import LinkTokenCreateRequest
 from plaid.model.products import Products
@@ -39,6 +40,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+raw_analytics = (
+    db.query(models.Transaction.category, func.sum(models.Transaction.amount).label("total"))
+    .filter(models.Transaction.user_id == current_user.user_id)
+    .group_by(models.Transaction.category)
+    .all()
+)
+
+chart_data_payload = [
+    {"category": row.category or "Uncategorized", "amount": float(row.total)}
+    for row in raw_analytics
+]
 
 class TokenTestPayload(BaseModel):
     secret_data: str
@@ -323,3 +335,15 @@ def get_spending_structure(
             status_code=500, 
             detail=f"High-speed analytics mathematical evaluation collapsed: {str(e)}"
         )
+
+@app.post("/api/transactions/verify-risk")
+def verify_transaction_risk(transaction_data: dict, current_user: models.User = Depends(get_current_user)):
+    # Pipe incoming transaction properties straight to Triton
+    risk_result = evaluate_swipe_risk(transaction_data)
+    
+    if risk_result["action"] == "DECLINE":
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Transaction blocked by AI Engine. Reason: {risk_result['reason']}"
+        )
+    return risk_result
