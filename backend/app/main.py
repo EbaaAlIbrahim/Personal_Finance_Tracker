@@ -1,3 +1,7 @@
+import sys
+import os
+# Dynamically add the backend folder to the Python lookup matrix paths
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import uuid
 from fastapi import FastAPI, HTTPException, Depends, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
