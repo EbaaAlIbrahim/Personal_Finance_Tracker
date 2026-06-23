@@ -1,3 +1,4 @@
+# api/main.py
 import uuid
 from fastapi import FastAPI, HTTPException, Depends, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,7 +9,7 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
-# FIXED: Changed to absolute imports since 'app' is a root-level folder now
+# Absolute package lookups (Vercel will find these inside your backend/ folder)
 from app.config import settings
 from app.security import encrypt_token, decrypt_token, hash_password, verify_password, create_access_token
 from app.database import engine, Base, get_db
@@ -17,20 +18,20 @@ from app.fraud_detector import evaluate_swipe_risk
 from app.transactions_mock import generate_mock_transactions_data
 import app.models as models 
 
-# Initialize SQL database tables natively
+# Initialize database mapping tables natively
 Base.metadata.create_all(bind=engine)
 
-fastapi_app = FastAPI(title="Finance Tracker Architecture Test")
+app = FastAPI(title="Finance Tracker Architecture Test")
 
 # Configure explicit origin domains to clear client cross-origin traffic barriers
 origins = [
     "http://localhost:5173",    
     "http://127.0.0.1:5173",
     "http://localhost:3000",
-    "https://personal-finance-tracker-ui-kohl.vercel.app",  
+    "https://vercel.app",  
 ]
 
-fastapi_app.add_middleware(
+app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
@@ -200,9 +201,9 @@ def verify_transaction_risk(transaction_data: dict, current_user: models.User = 
     return risk_result
 
 # --- ROUTER REGISTRATION ---
-fastapi_app.include_router(api_router, prefix="/api")
-fastapi_app.include_router(api_router, prefix="")
+app.include_router(api_router, prefix="/api")
+app.include_router(api_router, prefix="")
 
-# FIXED: Vercel's Python entry points strictly seek a variable named 'app'
+# Serverless adapter linkage for Vercel
 from mangum import Mangum
-app = Mangum(fastapi_app)
+handler = Mangum(app)
