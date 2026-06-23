@@ -1,0 +1,21 @@
+import { usePlaidLink } from 'react-plaid-link';
+
+// Inside your App component:
+const [linkToken, setLinkToken] = useState(null);
+
+const triggerPlaidSetup = async () => {
+  const response = await bankAPI.createLinkToken();
+  setLinkToken(response.data.link_token);
+};
+
+const { open, ready } = usePlaidLink({
+  token: linkToken,
+  onSuccess: async (public_token, metadata) => {
+    await bankAPI.exchangePublicToken(public_token);
+    // Refresh ledger telemetry right after sync
+    fetchFinancialTelemetry();
+  },
+});
+
+// Auto-open when token is successfully requested from backend
+useEffect(() => { if (linkToken) open(); }, [linkToken]);
