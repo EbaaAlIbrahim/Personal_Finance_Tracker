@@ -106,7 +106,8 @@ def get_authenticated_profile(current_user: models.User = Depends(get_current_us
 @api_router.get("/test-db")
 def test_database_connection(db: Session = Depends(get_db)):
     try:
-        result = db.execute(models.func.now()).scalar()
+        Base.metadata.create_all(bind=engine) # Runs safely inside request context
+        result = db.execute(func.now()).scalar()
         return {"status": "connected", "postgresql_timestamp": result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
