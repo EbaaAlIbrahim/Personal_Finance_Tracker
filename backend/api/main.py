@@ -1,5 +1,6 @@
-from app.main import app
+# backend\api\main.py
+from app.main import app as fastapi_app
 from mangum import Mangum
 
-# Instantiates a serverless handler wrapper engine
-handler = Mangum(app)
+# Vercel's Python runtime strictly looks for a variable named 'app'
+app = Mangum(fastapi_app)
