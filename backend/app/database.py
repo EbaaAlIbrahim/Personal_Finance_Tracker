@@ -9,9 +9,12 @@ DATABASE_URL = os.getenv("DATABASE_URL") or settings.DATABASE_URL
 if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
+# Add connect_args to safely handle serverless pooling
 engine = create_engine(
     DATABASE_URL, 
-    pool_pre_ping=True
+    pool_pre_ping=True,
+    pool_reset_on_return="rollback",
+    connect_args={"sslmode": "require"}
 )
 
 SessionLocal = sessionmaker(
@@ -23,10 +26,6 @@ SessionLocal = sessionmaker(
 Base = declarative_base()
 
 def get_db():
-    """
-    Opens a secure database connection for a single API request,
-    and automatically closes it when the request is finished.
-    """
     db = SessionLocal()
     try:
         yield db

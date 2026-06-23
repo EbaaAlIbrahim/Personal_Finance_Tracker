@@ -18,9 +18,6 @@ from app.fraud_detector import evaluate_swipe_risk
 from app.transactions_mock import generate_mock_transactions_data
 import app.models as models 
 
-# Initialize database mapping tables natively
-Base.metadata.create_all(bind=engine)
-
 app = FastAPI(title="Finance Tracker Architecture Test")
 
 # Configure explicit origin domains to clear client cross-origin traffic barriers
@@ -28,6 +25,7 @@ origins = [
     "http://localhost:5173",    
     "http://127.0.0.1:5173",
     "http://localhost:3000",
+    "https://vercel.app", 
     "https://vercel.app",  
 ]
 
