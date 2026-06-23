@@ -15,23 +15,25 @@ from app.plaid_client import plaid_client, IS_MOCK_MODE
 from plaid.model.link_token_create_request import LinkTokenCreateRequest
 from plaid.model.products import Products
 from plaid.model.country_code import CountryCode
+from app.transactions_mock import generate_mock_transactions_data  # Import mock seed handler
 
 from collections import defaultdict
 from decimal import Decimal
 
+# Initialize SQL database tables natively
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Finance Tracker Architecture Test")
 
-# 2. Configure the explicit origin domain mappings to allow frontend connections
+# 1. Configure explicit origin domains to clear client cross-origin traffic barriers
 origins = [
-    "http://localhost:5173",    # Vite's standard local hosting port address
+    "http://localhost:5173",    # Vite local development hosting address
     "http://127.0.0.1:5173",
     "http://localhost:3000",
-    "https://personal-finance-tracker-ui-kohl.vercel.app",
+    "https://vercel.app",  # Production React UI Node
 ]
 
-# 3. Bind the middleware interceptor to your app engine instance
+# 2. Bind the middleware interceptor to your app engine instance
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -40,18 +42,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-raw_analytics = (
-    db.query(models.Transaction.category, func.sum(models.Transaction.amount).label("total"))
-    .filter(models.Transaction.user_id == current_user.user_id)
-    .group_by(models.Transaction.category)
-    .all()
-)
-
-chart_data_payload = [
-    {"category": row.category or "Uncategorized", "amount": float(row.total)}
-    for row in raw_analytics
-]
-
+# --- REQUEST VALIDATION SCHEMAS ---
 class TokenTestPayload(BaseModel):
     secret_data: str
 
@@ -59,10 +50,11 @@ class UserRegisterPayload(BaseModel):
     email: str
     password: str
 
-# Data contract validation layer for incoming public tokens
 class PublicTokenExchangePayload(BaseModel):
     public_token: str
 
+
+# --- CORE FINANCIAL ENDPOINTS ---
 @app.get("/health")
 def health_check():
     return {
@@ -122,12 +114,10 @@ def test_database_connection(db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+# --- PLAID LINK API ENDPOINTS ---
 @app.post("/api/create_link_token")
 def create_plaid_link_token(current_user: models.User = Depends(get_current_user)):
-    """
-    Protected endpoint that returns an official token from Plaid,
-    or switches to a local simulation if developer keys are missing.
-    """
     if IS_MOCK_MODE:
         return {
             "link_token": f"link-mock-sandbox-{current_user.user_id}",
@@ -146,12 +136,8 @@ def create_plaid_link_token(current_user: models.User = Depends(get_current_user
         )
         response = plaid_client.link_token_create(request)
         return response.to_dict()
-
     except Exception as e:
-        raise HTTPException(
-            status_code=500, 
-            detail=f"Failed to communicate with bank data initialization gateway: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/exchange_public_token")
 def exchange_plaid_public_token(
@@ -159,18 +145,12 @@ def exchange_plaid_public_token(
     current_user: models.User = Depends(get_current_user), 
     db: Session = Depends(get_db)
 ):
-    """
-    Exchanges a temporary frontend public token for a permanent access token,
-    encrypts the token, and saves it securely to the database.
-    """
-    # --- HANDLER 1: SIMULATION FALLBACK MODE ---
     if IS_MOCK_MODE:
         mock_access_token = f"access-mock-sandbox-{uuid.uuid4()}"
         mock_item_id = f"item-mock-{uuid.uuid4()}"
-        mock_institution_id = "ins_12345"  # Standard placeholder for Chase Bank in Plaid Sandbox
+        mock_institution_id = "ins_12345"
         
         encrypted_token = encrypt_token(mock_access_token)
-        
         new_item = models.PlaidItem(
             user_id=current_user.user_id,
             access_token_encrypted=encrypted_token,
@@ -178,77 +158,38 @@ def exchange_plaid_public_token(
             institution_id=mock_institution_id,
             status="active"
         )
-        
         db.add(new_item)
         db.commit()
-        db.refresh(new_item)
-        
-        return {
-            "status": "success",
-            "item_id": new_item.plaid_item_id,
-            "mode": "simulation_fallback",
-            "message": "Simulated bank account linked, encrypted, and saved successfully!"
-        }
+        return {"status": "success", "item_id": new_item.plaid_item_id, "mode": "simulation_fallback"}
 
-    # --- HANDLER 2: LIVE PLAID API WORKFLOW ---
     try:
         from plaid.model.item_public_token_exchange_request import ItemPublicTokenExchangeRequest
-        
         exchange_request = ItemPublicTokenExchangeRequest(public_token=payload.public_token)
         exchange_response = plaid_client.item_public_token_exchange(exchange_request)
         
-        raw_access_token = exchange_response['access_token']
-        raw_item_id = exchange_response['item_id']
-        raw_institution_id = "unknown"
-        
-        encrypted_token = encrypt_token(raw_access_token)
-        
+        encrypted_token = encrypt_token(exchange_response['access_token'])
         new_item = models.PlaidItem(
             user_id=current_user.user_id,
             access_token_encrypted=encrypted_token,
-            plaid_item_id=raw_item_id,
-            institution_id=raw_institution_id,
+            plaid_item_id=exchange_response['item_id'],
+            institution_id="unknown",
             status="active"
         )
-        
         db.add(new_item)
         db.commit()
-        db.refresh(new_item)
-        
-        return {
-            "status": "success",
-            "item_id": new_item.plaid_item_id,
-            "mode": "live"
-        }
-        
+        return {"status": "success", "item_id": new_item.plaid_item_id, "mode": "live"}
     except Exception as e:
-        raise HTTPException(
-            status_code=500, 
-            detail=f"Failed to complete token exchange handshake with banking server: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=str(e))
 
-from app.transactions_mock import generate_mock_transactions_data  # Import mock seed handler
 
+# --- LEDGER & TRANSACTIONS MANAGEMENT ---
 @app.post("/api/transactions/seed")
-def seed_mock_transactions(
-    current_user: models.User = Depends(get_current_user), 
-    db: Session = Depends(get_db)
-):
-    """
-    Clears any prior mock history transactions for the authorized user account, 
-    and injects a clean 30-day simulated purchase data matrix ledger.
-    """
+def seed_mock_transactions(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     try:
-        # 1. Safely remove historical transactions mapped to this explicit user to refresh state cleanly
         db.query(models.Transaction).filter(models.Transaction.user_id == current_user.user_id).delete()
-        
-        # 2. Invoke our vector matrix layout generator tool
         new_history_dataset = generate_mock_transactions_data(user_id=current_user.user_id, days_back=30)
-        
-        # 3. Commit the entity transaction bundle state directly into PostgreSQL
         db.add_all(new_history_dataset)
         db.commit()
-        
         return {
             "status": "seeded",
             "total_records_inserted": len(new_history_dataset),
@@ -258,13 +199,8 @@ def seed_mock_transactions(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Database data seeding transaction failed: {str(e)}")
 
-
 @app.get("/api/transactions")
-def get_user_transactions(
-    current_user: models.User = Depends(get_current_user), 
-    db: Session = Depends(get_db)
-):
-    """Retrieves all database ledger transaction items linked to the authorized user account profile."""
+def get_user_transactions(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     try:
         transactions = (
             db.query(models.Transaction)
@@ -272,78 +208,49 @@ def get_user_transactions(
             .order_by(models.Transaction.transaction_date.desc())
             .all()
         )
-        return {
-            "status": "success",
-            "count": len(transactions),
-            "data": transactions
-        }
+        return {"status": "success", "count": len(transactions), "data": transactions}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to pull transaction profiles: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
+# --- HIGH-PERFORMANCE SQL TELEMETRY & ANALYTICS ---
 @app.get("/api/analytics/spending-structure")
-def get_spending_structure(
-    current_user: models.User = Depends(get_current_user), 
-    db: Session = Depends(get_db)
-):
-    """
-    Parses all transaction items instantly to compute aggregated 
-    spending volumes by category and calculate key summary metrics.
-    """
+def get_spending_structure(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Parses transaction arrays to compute aggregated volumes natively inside the SQL layer."""
     try:
-        # 1. Fetch flat transactions array matching the user profile
-        transactions = (
-            db.query(models.Transaction)
+        raw_analytics = (
+            db.query(models.Transaction.category, func.sum(models.Transaction.amount).label("total"))
             .filter(models.Transaction.user_id == current_user.user_id)
+            .group_by(models.Transaction.category)
             .all()
         )
         
-        # 2. Initialize rapid aggregation mapping lookups
-        category_totals = defaultdict(Decimal)
-        total_variable_spend = Decimal("0.00")
-        
-        # 3. Single-pass aggregation loop for optimized performance
-        for tx in transactions:
-            amount_dec = Decimal(str(tx.amount))
-            cat_name = tx.category or "Uncategorized"
-            
-            # Map aggregated metrics
-            category_totals[cat_name] += amount_dec
-            total_variable_spend += amount_dec
-            
-        # 4. Reformat dictionary into a clean array structure for Recharts consumption
         chart_data_payload = [
-            {
-                "category": cat, 
-                "amount": float(amt.quantize(Decimal("0.01")))
-            }
-            for cat, amt in category_totals.items()
+            {"category": row.category or "Uncategorized", "amount": float(row.total)}
+            for row in raw_analytics
         ]
+        
+        total_spend = sum(item["amount"] for item in chart_data_payload)
         
         return {
             "status": "success",
             "summary": {
-                "total_spend_volume": float(total_variable_spend.quantize(Decimal("0.01"))),
-                "transaction_count": len(transactions),
+                "total_spend_volume": float(round(total_spend, 2)),
+                "transaction_count": len(chart_data_payload),
                 "active_categories": len(chart_data_payload)
             },
             "chart_data": chart_data_payload
         }
-        
     except Exception as e:
-        raise HTTPException(
-            status_code=500, 
-            detail=f"High-speed analytics mathematical evaluation collapsed: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"High-speed analytics mathematical evaluation collapsed: {str(e)}")
 
+
+# --- REAL-TIME RISK DETECTION ENDPOINT ---
 @app.post("/api/transactions/verify-risk")
 def verify_transaction_risk(transaction_data: dict, current_user: models.User = Depends(get_current_user)):
-    # Pipe incoming transaction properties straight to Triton
+    """Pipes swipe event metrics directly to our fallback AI forensic verification client matrix."""
     risk_result = evaluate_swipe_risk(transaction_data)
     
     if risk_result["action"] == "DECLINE":
-        raise HTTPException(
-            status_code=400, 
-            detail=f"Transaction blocked by AI Engine. Reason: {risk_result['reason']}"
-        )
+        raise HTTPException(status_code=400,detail=f"Transaction blocked by AI Engine. Reason: {risk_result['reason']}")
     return risk_result
