@@ -2,7 +2,7 @@
   "version": 2,
   "builds": [
     {
-      "src": "backend/app/main.py",
+      "src": "api/main.py",
       "use": "@vercel/python",
       "config": { 
         "runtime": "python3.10"
@@ -12,11 +12,7 @@
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "backend/app/main.py"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "backend/app/main.py"
+      "dest": "api/main.py"
     }
   ],
   "env": {
