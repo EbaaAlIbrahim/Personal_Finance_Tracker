@@ -242,3 +242,8 @@ def verify_transaction_risk(transaction_data: dict, current_user: models.User = 
 app.include_router(api_router, prefix="/api")
 # Mounts routes directly at / root level (for transparent serverless proxy routing compatibility)
 app.include_router(api_router, prefix="")
+
+# --- SERVERLESS ADAPTER MOUNT ---
+from mangum import Mangum
+# Vercel's ASGI container strictly seeks a variable named 'handler' inside your 'vercel.json' link map target
+handler = Mangum(app)
