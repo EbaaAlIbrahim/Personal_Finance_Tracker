@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { usePlaidLink } from 'react-plaid-link';
-import { authAPI, transactionAPI } from './api';
+import { authAPI, transactionAPI, bankAPI } from './api';
 import './App.css';
 
 const COLORS = ['#38bdf8', '#10b981', '#f43f5e', '#a855f7', '#f59e0b', '#ec4899', '#64748b'];
@@ -74,46 +74,35 @@ export default function App() {
     }
   }, [isAuthenticated]);
 
-    // Plaid Link initialization handler
+      // Bypasses the heavy react-plaid-link library and simulates the pairing process
   const triggerPlaidSetup = async () => {
     try {
       setIsLinkingBank(true);
-      const response = await bankAPI.createLinkToken();
-      // Handle response directly based on your FastAPI structure
-      const fetchedToken = response.data.link_token;
-      setLinkToken(fetchedToken);
+      
+      // 1. Tell backend to log the simulation process initialization
+      await bankAPI.createLinkToken();
+      
+      // 2. Automatically pass a fake public token straight to your exchange endpoint
+      const exchangeRes = await bankAPI.exchangePublicToken("mock-public-token-12345");
+      
+      if (exchangeRes.data.status === "success") {
+        // 3. Immediately auto-populate your cloud Supabase database tables with historical rows
+        await transactionAPI.seedTransactions();
+        
+        // 4. Update the UI state dashboards seamlessly with the fresh chart numbers
+        await fetchFinancialTelemetry();
+        alert("Bank connection simulated successfully via Mock Engine Fallback!");
+      }
+      setIsLinkingBank(false);
     } catch (err) {
-      console.error("Failed to fetch secure bank handshake initialization token:", err);
+      console.error("Failed to execute secure bank handshake simulation:", err);
       setIsLinkingBank(false);
     }
   };
 
-  // Instantiating the Plaid React Client SDK configuration hook
-  const { open, ready } = usePlaidLink({
-    token: linkToken,
-    onSuccess: async (public_token, metadata) => {
-      try {
-        await bankAPI.exchangePublicToken(public_token);
-        setLinkToken(null);
-        setIsLinkingBank(false);
-        await fetchFinancialTelemetry(); // Instantly pull live asset balance states
-      } catch (err) {
-        console.error("Token handshake exchange protocol failure:", err);
-        setIsLinkingBank(false);
-      }
-    },
-    onExit: (err, metadata) => {
-      setLinkToken(null);
-      setIsLinkingBank(false);
-    }
-  });
-
-  // Safe engine watch rule to open overlay whenever a token drops from your server
-  useEffect(() => {
-    if (linkToken && ready) {
-      open();
-    }
-  }, [linkToken, ready]);
+  // Safe engine overrides to satisfy dependencies without loading official Plaid hooks
+  const ready = false;
+  const open = () => {};
 
   const handleAuthSubmit = async (e) => {
     e.preventDefault();
