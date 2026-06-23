@@ -4,9 +4,7 @@
     {
       "src": "api/main.py",
       "use": "@vercel/python",
-      "config": { 
-        "runtime": "python3.10"
-      }
+      "config": { "runtime": "python3.10" }
     }
   ],
   "routes": [
@@ -14,8 +12,5 @@
       "src": "/api/(.*)",
       "dest": "api/main.py"
     }
-  ],
-  "env": {
-    "PYTHONPATH": "backend"
-  }
+  ]
 }

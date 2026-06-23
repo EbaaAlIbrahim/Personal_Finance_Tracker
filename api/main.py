@@ -8,29 +8,19 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
-import sys
-import os
-
-# Dynamically force local python engines to view your backend root partition folder
-base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-backend_path = os.path.join(base_path, "backend")
-if backend_path not in sys.path:
-    sys.path.append(backend_path)
-
-
-# Absolute imports linked to your PYTHONPATH environment setting
+# FIXED: Changed to absolute imports since 'app' is a root-level folder now
 from app.config import settings
 from app.security import encrypt_token, decrypt_token, hash_password, verify_password, create_access_token
 from app.database import engine, Base, get_db
 from app.dependencies import get_current_user  
 from app.fraud_detector import evaluate_swipe_risk
 from app.transactions_mock import generate_mock_transactions_data
-import app.models as models  # FIXED: Removed the stray trailing dot syntax error
+import app.models as models 
 
 # Initialize SQL database tables natively
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="Finance Tracker Architecture Test")
+fastapi_app = FastAPI(title="Finance Tracker Architecture Test")
 
 # Configure explicit origin domains to clear client cross-origin traffic barriers
 origins = [
@@ -40,7 +30,7 @@ origins = [
     "https://personal-finance-tracker-ui-kohl.vercel.app",  
 ]
 
-app.add_middleware(
+fastapi_app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
@@ -202,7 +192,7 @@ def get_spending_structure(current_user: models.User = Depends(get_current_user)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/transactions/verify-risk")
+@api_router.post("/transactions/verify-risk")
 def verify_transaction_risk(transaction_data: dict, current_user: models.User = Depends(get_current_user)):
     risk_result = evaluate_swipe_risk(transaction_data)
     if risk_result["action"] == "DECLINE":
@@ -210,9 +200,9 @@ def verify_transaction_risk(transaction_data: dict, current_user: models.User = 
     return risk_result
 
 # --- ROUTER REGISTRATION ---
-app.include_router(api_router, prefix="/api")
-app.include_router(api_router, prefix="")
+fastapi_app.include_router(api_router, prefix="/api")
+fastapi_app.include_router(api_router, prefix="")
 
-# Serverless execution layer entrypoint hook variable mapping for Mangum
+# FIXED: Vercel's Python entry points strictly seek a variable named 'app'
 from mangum import Mangum
-handler = Mangum(app)
+app = Mangum(fastapi_app)
