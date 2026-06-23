@@ -25,8 +25,7 @@ origins = [
     "http://localhost:5173",    
     "http://127.0.0.1:5173",
     "http://localhost:3000",
-    "https://vercel.app", 
-    "https://vercel.app",  
+    "https://personal-finance-tracker-ui-kohl.vercel.app", 
 ]
 
 app.add_middleware(
@@ -202,9 +201,3 @@ def verify_transaction_risk(transaction_data: dict, current_user: models.User = 
 # --- ROUTER REGISTRATION ---
 app.include_router(api_router, prefix="/api")
 app.include_router(api_router, prefix="")
-
-# Serverless adapter linkage for Vercel
-from mangum import Mangum
-handler = Mangum(app)
-
-app = handler 
