@@ -9,14 +9,17 @@
     {
       "src": "api/main.py",
       "use": "@vercel/python",
-      "config": { "runtime": "python3.10" }
+      "config": { 
+        "runtime": "python3.10",
+        "includeFiles": "backend/**"
+      }
     }
   ],
   "routes": [
     {
       "src": "/api/(.*)",
       "headers": {
-        "Access-Control-Allow-Origin": "https://personal-finance-tracker-ui-kohl.vercel.app",
+        "Access-Control-Allow-Origin": "https://vercel.app",
         "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type, Authorization",
         "Access-Control-Allow-Credentials": "true"

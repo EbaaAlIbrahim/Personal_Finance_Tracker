@@ -208,3 +208,5 @@ app.include_router(api_router, prefix="")
 # Serverless adapter linkage for Vercel
 from mangum import Mangum
 handler = Mangum(app)
+
+app = handler 
