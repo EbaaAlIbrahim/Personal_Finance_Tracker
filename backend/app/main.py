@@ -2,19 +2,20 @@ import uuid
 from fastapi import FastAPI, HTTPException, Depends, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
+from pydantic import BaseModel  # FIXED: Imported missing validation base class
 from collections import defaultdict
 from decimal import Decimal
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
-# CRITICAL FIX: Changed to explicit relative imports to prevent Vercel module resolution crashes
+# Explicit relative imports to prevent package resolution conflicts on Vercel
 from .config import settings
 from .security import encrypt_token, decrypt_token, hash_password, verify_password, create_access_token
 from .database import engine, Base, get_db
 from .dependencies import get_current_user  
 from .fraud_detector import evaluate_swipe_risk
 from .transactions_mock import generate_mock_transactions_data
-import app.models as models
+from . import models  # FIXED: Standardized to a clean relative package lookup context
 
 # Initialize SQL database tables natively
 Base.metadata.create_all(bind=engine)
@@ -111,7 +112,6 @@ def test_database_connection(db: Session = Depends(get_db)):
 
 @api_router.post("/create_link_token")
 def create_plaid_link_token(current_user: models.User = Depends(get_current_user)):
-    # Fallback to local simulation if configuration parameters are offline
     return {
         "link_token": f"link-mock-sandbox-{current_user.user_id}",
         "expiration": "2026-05-17T23:59:59Z",
@@ -203,5 +203,6 @@ def verify_transaction_risk(transaction_data: dict, current_user: models.User = 
 app.include_router(api_router, prefix="/api")
 app.include_router(api_router, prefix="")
 
-# Note: Mangum handler is completely removed. Vercel's Python runtime natively 
-# supports ASGI frameworks if the global variable instance is named 'app'.
+# Serverless execution layer entrypoint hook variable mapping for Mangum
+from mangum import Mangum
+handler = Mangum(app)
