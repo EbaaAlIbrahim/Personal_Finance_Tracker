@@ -1,5 +1,5 @@
 import uuid
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 from app.config import settings
@@ -15,7 +15,7 @@ from app.plaid_client import plaid_client, IS_MOCK_MODE
 from plaid.model.link_token_create_request import LinkTokenCreateRequest
 from plaid.model.products import Products
 from plaid.model.country_code import CountryCode
-from app.transactions_mock import generate_mock_transactions_data  # Import mock seed handler
+from app.transactions_mock import generate_mock_transactions_data
 
 from collections import defaultdict
 from decimal import Decimal
@@ -27,13 +27,12 @@ app = FastAPI(title="Finance Tracker Architecture Test")
 
 # 1. Configure explicit origin domains to clear client cross-origin traffic barriers
 origins = [
-    "http://localhost:5173",    # Vite local development hosting address
+    "http://localhost:5173",    
     "http://127.0.0.1:5173",
     "http://localhost:3000",
-    "https://vercel.app",  # Production React UI Node
+    "https://personal-finance-tracker-ui-kohl.vercel.app",  
 ]
 
-# 2. Bind the middleware interceptor to your app engine instance
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -54,8 +53,11 @@ class PublicTokenExchangePayload(BaseModel):
     public_token: str
 
 
-# --- CORE FINANCIAL ENDPOINTS ---
-@app.get("/health")
+# --- ROUTER SYSTEM CREATION ---
+# This ensures FastAPI responds perfectly whether Vercel preserves or strips the prefix
+api_router = APIRouter()
+
+@api_router.get("/health")
 def health_check():
     return {
         "status": "online",
@@ -63,7 +65,7 @@ def health_check():
         "plaid_env_configured": settings.PLAID_ENV
     }
 
-@app.post("/api/register")
+@api_router.post("/register")
 def register_user(payload: UserRegisterPayload, db: Session = Depends(get_db)):
     existing_user = db.query(models.User).filter(models.User.email == payload.email).first()
     if existing_user:
@@ -83,9 +85,8 @@ def register_user(payload: UserRegisterPayload, db: Session = Depends(get_db)):
         "message": "User registered successfully!"
     }
 
-@app.post("/api/login")
+@api_router.post("/login")
 def login_user(payload: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    """Authenticates user profile records via standard OAuth2 forms and issues session tokens."""
     user = db.query(models.User).filter(models.User.email == payload.username).first()
     if not user or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid email or password configuration.")
@@ -96,9 +97,8 @@ def login_user(payload: OAuth2PasswordRequestForm = Depends(), db: Session = Dep
         "token_type": "bearer"
     }
 
-@app.get("/api/users/me")
+@api_router.get("/users/me")
 def get_authenticated_profile(current_user: models.User = Depends(get_current_user)):
-    """A protected checkpoint route that returns private user details only to logged-in accounts."""
     return {
         "status": "authorized",
         "user_id": str(current_user.user_id),
@@ -106,7 +106,7 @@ def get_authenticated_profile(current_user: models.User = Depends(get_current_us
         "account_created_timestamp": current_user.created_at
     }
 
-@app.get("/api/test-db")
+@api_router.get("/test-db")
 def test_database_connection(db: Session = Depends(get_db)):
     try:
         result = db.execute(models.func.now()).scalar()
@@ -114,9 +114,7 @@ def test_database_connection(db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
-# --- PLAID LINK API ENDPOINTS ---
-@app.post("/api/create_link_token")
+@api_router.post("/create_link_token")
 def create_plaid_link_token(current_user: models.User = Depends(get_current_user)):
     if IS_MOCK_MODE:
         return {
@@ -125,7 +123,6 @@ def create_plaid_link_token(current_user: models.User = Depends(get_current_user
             "request_id": "mock-req-id-12345",
             "mode": "simulation_fallback"
         }
-
     try:
         request = LinkTokenCreateRequest(
             user={"client_user_id": str(current_user.user_id)},
@@ -139,12 +136,8 @@ def create_plaid_link_token(current_user: models.User = Depends(get_current_user
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/exchange_public_token")
-def exchange_plaid_public_token(
-    payload: PublicTokenExchangePayload, 
-    current_user: models.User = Depends(get_current_user), 
-    db: Session = Depends(get_db)
-):
+@api_router.post("/exchange_public_token")
+def exchange_plaid_public_token(payload: PublicTokenExchangePayload, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     if IS_MOCK_MODE:
         mock_access_token = f"access-mock-sandbox-{uuid.uuid4()}"
         mock_item_id = f"item-mock-{uuid.uuid4()}"
@@ -181,9 +174,7 @@ def exchange_plaid_public_token(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
-# --- LEDGER & TRANSACTIONS MANAGEMENT ---
-@app.post("/api/transactions/seed")
+@api_router.post("/transactions/seed")
 def seed_mock_transactions(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     try:
         db.query(models.Transaction).filter(models.Transaction.user_id == current_user.user_id).delete()
@@ -199,7 +190,7 @@ def seed_mock_transactions(current_user: models.User = Depends(get_current_user)
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Database data seeding transaction failed: {str(e)}")
 
-@app.get("/api/transactions")
+@api_router.get("/transactions")
 def get_user_transactions(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     try:
         transactions = (
@@ -212,11 +203,8 @@ def get_user_transactions(current_user: models.User = Depends(get_current_user),
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
-# --- HIGH-PERFORMANCE SQL TELEMETRY & ANALYTICS ---
-@app.get("/api/analytics/spending-structure")
+@api_router.get("/analytics/spending-structure")
 def get_spending_structure(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Parses transaction arrays to compute aggregated volumes natively inside the SQL layer."""
     try:
         raw_analytics = (
             db.query(models.Transaction.category, func.sum(models.Transaction.amount).label("total"))
@@ -224,14 +212,11 @@ def get_spending_structure(current_user: models.User = Depends(get_current_user)
             .group_by(models.Transaction.category)
             .all()
         )
-        
         chart_data_payload = [
             {"category": row.category or "Uncategorized", "amount": float(row.total)}
             for row in raw_analytics
         ]
-        
         total_spend = sum(item["amount"] for item in chart_data_payload)
-        
         return {
             "status": "success",
             "summary": {
@@ -242,15 +227,18 @@ def get_spending_structure(current_user: models.User = Depends(get_current_user)
             "chart_data": chart_data_payload
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"High-speed analytics mathematical evaluation collapsed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-
-# --- REAL-TIME RISK DETECTION ENDPOINT ---
-@app.post("/api/transactions/verify-risk")
+@api_router.post("/transactions/verify-risk")
 def verify_transaction_risk(transaction_data: dict, current_user: models.User = Depends(get_current_user)):
-    """Pipes swipe event metrics directly to our fallback AI forensic verification client matrix."""
     risk_result = evaluate_swipe_risk(transaction_data)
-    
     if risk_result["action"] == "DECLINE":
-        raise HTTPException(status_code=400,detail=f"Transaction blocked by AI Engine. Reason: {risk_result['reason']}")
+        raise HTTPException(status_code=400, detail=f"Transaction blocked by AI Engine. Reason: {risk_result['reason']}")
     return risk_result
+
+
+# --- CRITICAL STEP: MOUNT SYSTEM ROUTER TWICE FOR ABSOLUTE SAFETY ---
+# Mounts routes under /api (for local dev server consistency)
+app.include_router(api_router, prefix="/api")
+# Mounts routes directly at / root level (for transparent serverless proxy routing compatibility)
+app.include_router(api_router, prefix="")
