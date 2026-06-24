@@ -8,6 +8,7 @@ from collections import defaultdict
 from decimal import Decimal
 from sqlalchemy.orm import Session
 from sqlalchemy import func
+from datetime import datetime, timezone
 
 # Absolute package lookups (Vercel will find these inside your backend/ folder)
 from app.config import settings
@@ -43,6 +44,10 @@ class TokenTestPayload(BaseModel):
 class UserRegisterPayload(BaseModel):
     email: str
     password: str
+    first_name: str
+    last_name: str
+    home_region: str
+    target_monthly_budget: float
 
 class PublicTokenExchangePayload(BaseModel):
     public_token: str
@@ -67,7 +72,11 @@ def register_user(payload: UserRegisterPayload, db: Session = Depends(get_db)):
     
     new_user = models.User(
         email=payload.email,
-        password_hash=hash_password(payload.password)
+        password_hash=hash_password(payload.password),
+        first_name=payload.first_name,
+        last_name=payload.last_name,
+        home_region=payload.home_region,
+        target_monthly_budget=Decimal(str(payload.target_monthly_budget))
     )
     db.add(new_user)
     db.commit()
@@ -192,11 +201,46 @@ def get_spending_structure(current_user: models.User = Depends(get_current_user)
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.post("/transactions/verify-risk")
-def verify_transaction_risk(transaction_data: dict, current_user: models.User = Depends(get_current_user)):
-    risk_result = evaluate_swipe_risk(transaction_data)
+def verify_transaction_risk(transaction_data: dict, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """
+    Adaptive Machine Learning Endpoint Checkpoint.
+    Verifies transaction risk, and automatically appends approved vectors 
+    to the history database so the AI adapts to user movement dynamically.
+    """
+    # 1. Run the multi-layer machine learning evaluation matrix
+    risk_result = evaluate_swipe_risk(transaction_data, db, current_user.user_id)
+    
+    # 2. Intercept threats immediately
     if risk_result["action"] == "DECLINE":
         raise HTTPException(status_code=400, detail=f"Transaction blocked by AI Engine. Reason: {risk_result['reason']}")
+        
+    # 3. 🌟 AUTOMATED ADAPTATION LOOP: If approved, save this coordinate point to the database history!
+    try:
+        adaptive_tx = models.Transaction(
+            transaction_id=f"tx-adaptive-{uuid.uuid4()}",
+            user_id=current_user.user_id,
+            account_id="acc-mock-checking-8888",
+            amount=Decimal(str(transaction_data.get("amount", 0.0))),
+            currency="USD",
+            category="AI Adaptive Learning",
+            merchant_name="Verified Location Update",
+            transaction_date=datetime.now(timezone.utc),
+            pending=False,
+            # Silently capture the active phone location inputs into your permanent ledger
+            latitude=float(transaction_data.get("latitude", 0.0)),
+            longitude=float(transaction_data.get("longitude", 0.0)),
+            device_fingerprint=transaction_data.get("device_fingerprint", "verified_device"),
+            cardholder_ip=transaction_data.get("cardholder_ip", "127.0.0.1")
+        )
+        db.add(adaptive_tx)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        # Fail silently on the database write so the user's purchase experience isn't interrupted
+        print(f"Adaptive data layer sync skipped: {str(e)}")
+        
     return risk_result
+
 
 # --- ROUTER REGISTRATION ---
 app.include_router(api_router, prefix="/api")

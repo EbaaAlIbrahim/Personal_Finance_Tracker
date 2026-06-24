@@ -1,1 +1,13 @@
-.vercel
+# Python virtual environments
+venv/
+__pycache__/
+*.pyc
+
+# Node.js dependencies
+node_modules/
+dist/
+
+# Local configuration & environment variables
+.env
+.local
+.DS_Store

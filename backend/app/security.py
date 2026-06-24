@@ -43,7 +43,6 @@ def decrypt_token(encrypted_token_string: str) -> str:
 pwd_context = CryptContext(
     schemes=["bcrypt"], 
     deprecated="auto",
-    bcrypt__backend="bcrypt"
 )
 
 

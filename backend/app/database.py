@@ -10,12 +10,20 @@ DATABASE_URL = os.getenv("DATABASE_URL") or settings.DATABASE_URL
 if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
-# Using NullPool completely prevents persistent connections from crashing the transaction pooler
-engine = create_engine(
-    DATABASE_URL, 
-    poolclass=NullPool,
-    connect_args={"sslmode": "require"}
-)
+# Check if the connection string targets your local environment or an external cloud pooler
+if "localhost" in DATABASE_URL or "127.0.0.1" in DATABASE_URL:
+    # Local database engines run cleanly without requiring explicit SSL parameters
+    engine = create_engine(
+        DATABASE_URL,
+        pool_pre_ping=True
+    )
+else:
+    # Remote deployments (like serverless Vercel + Supabase) utilize NullPool and required SSL wrappers
+    engine = create_engine(
+        DATABASE_URL, 
+        poolclass=NullPool,
+        connect_args={"sslmode": "require"}
+    )
 
 SessionLocal = sessionmaker(
     autocommit=False, 
@@ -26,10 +34,6 @@ SessionLocal = sessionmaker(
 Base = declarative_base()
 
 def get_db():
-    """
-    Opens a secure database connection for a single API request,
-    and automatically closes it when the request is finished.
-    """
     db = SessionLocal()
     try:
         yield db

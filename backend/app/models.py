@@ -13,6 +13,11 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
+    first_name = Column(String(100), nullable=True)
+    last_name = Column(String(100), nullable=True)
+    home_region = Column(String(100), nullable=True)
+    target_monthly_budget = Column(Numeric(12, 2), nullable=True, default=2500.00)
+
     plaid_items = relationship("PlaidItem", back_populates="user", cascade="all, delete-orphan")
 
 
@@ -45,8 +50,8 @@ class Transaction(Base):
     category = Column(String(100), nullable=True)
     merchant_name = Column(String(255), nullable=True)
     
-    transaction_date = Column(Date, nullable=False, index=True)
-    authorized_date = Column(Date, nullable=True)
+    transaction_date = Column(DateTime(timezone=True), nullable=False, index=True)
+    authorized_date = Column(DateTime(timezone=True), nullable=True)
     pending = Column(Boolean, default=False)
 
     terminal_id = Column(String(100), nullable=True, index=True)
