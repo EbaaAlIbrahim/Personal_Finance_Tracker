@@ -731,7 +731,15 @@ export default function App() {
               <h2>Interactive Live Checkout Point-of-Sale</h2>
               <p style={{ color: 'var(--text-muted)', marginTop: '0.5rem' }}>Simulate real-world client swipes. Approved purchases deduct balances and retrain the AI model in real time.</p>
             </div>
-
+            <div style={{ background: 'rgba(56, 189, 248, 0.06)', border: '1px solid rgba(56, 189, 248, 0.25)', padding: '1.25rem', borderRadius: '8px', marginBottom: '2rem', display: 'flex', alignItems: 'flex-start', gap: '1rem' }}>
+              <RefreshCw size={20} color="var(--color-primary)" style={{ marginTop: '0.15rem', animation: 'spin 4s linear infinite' }} />
+              <div>
+                <strong style={{ color: '#fff', fontSize: '0.9rem', display: 'block', marginBottom: '0.25rem' }}>Adaptive Online Learning Core Active</strong>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: 0, lineHeight: '1.5' }}>
+                  This platform operates with **zero static behavior constraints**. Every single authorized checkout vector automatically streams into your database schema, forcing the background Isolation Forest trees to immediately adjust their multi-dimensional coordinate bounds and learn your habits natively !
+                </p>
+              </div>
+            </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
               {/* Merchant Selection Form */}
               <div style={{ background: 'var(--bg-sidebar)', padding: '1.5rem', borderRadius: '8px', border: '1px solid var(--border-line)' }}>
